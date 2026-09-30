@@ -1,5 +1,4 @@
 streamlit
 pandas
 google-generativeai
-supabase==2.3.0
-postgrest-py==0.10.4
+supabase
