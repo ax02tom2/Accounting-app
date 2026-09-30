@@ -46,8 +46,8 @@ def add_transaction(user_id, date, category, store, amount, source):
 # --- 4. 簡單登入系統 ---
 # ⚠️ 這裡可以自訂您和親友的帳號密碼 (格式："帳號": "密碼")
 USERS = {
-    "tom": "1234",
-    "friend": "5678",
+    "tom": "29449424",
+    "junnine": "1234",
     "guest": "0000"
 }
 
