@@ -112,7 +112,7 @@ elif tab_choice == "上傳發票/截圖":
     uploaded_file = st.sidebar.file_uploader("上傳發票或網購/銀行明細截圖", type=["jpg", "jpeg", "png"])
 
     if uploaded_file and api_key:
-        st.sidebar.image(uploaded_file, caption="上傳的圖片", use_column_width=True)
+        st.sidebar.image(uploaded_file, caption="上傳的圖片", width="stretch")
 
         if st.sidebar.button("🤖 AI 自動辨識並記帳"):
             with st.spinner("AI 正在分析圖片內容...這可能需要幾秒鐘"):
