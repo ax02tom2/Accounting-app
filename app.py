@@ -159,7 +159,7 @@ JSON 格式範例：
                     st.rerun()
                     
                 except json.JSONDecodeError:
-                    st.sidebar.error("AI 回傳的格式不正確，請再試一次。")
+                    st.sidebar.error("AI 回傳的格式不正確請再試一次。")
                 except Exception as e:
                     st.sidebar.error(f"辨識失敗：{e}")
 
