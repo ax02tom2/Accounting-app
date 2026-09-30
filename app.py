@@ -109,15 +109,27 @@ if tab_choice == "手動輸入":
             st.rerun()
 
 elif tab_choice == "上傳發票/截圖":
-    uploaded_file = st.sidebar.file_uploader("上傳發票或網購/銀行明細截圖", type=["jpg", "jpeg", "png"])
+    uploaded_file = st.sidebar.file_uploader(
+        "上傳發票或網購/銀行明細截圖",
+        type=["jpg", "jpeg", "png"]
+    )
+
     if uploaded_file and api_key:
-        st.sidebar.image(uploaded_file, caption="上傳的圖片", use_column_width=True)
+        st.sidebar.image(
+            uploaded_file,
+            caption="上傳的圖片",
+            width="stretch"
+        )
+
         if st.sidebar.button("🤖 AI 自動辨識並記帳"):
             with st.spinner("AI 正在分析圖片內容...這可能需要幾秒鐘"):
                 try:
                     image_bytes = uploaded_file.getvalue()
-                    image_part = {"mime_type": uploaded_file.type, "data": image_bytes}
-                    
+                    image_part = {
+                        "mime_type": uploaded_file.type,
+                        "data": image_bytes
+                    }
+
                     prompt = f"""這是一張銀行消費明細或發票的截圖。
 請幫我把裡面「所有」的消費紀錄都抓出來。
 請嚴格以 JSON 陣列 (JSON array) 的格式回傳，不要包含任何其他說明文字。
@@ -131,37 +143,55 @@ JSON 格式範例：
     "category": "請從 {", ".join(CATEGORIES)} 中選一個最適合的分類"
   }}
 ]"""
-                    
+
                     response = model.generate_content([image_part, prompt])
                     result_text = response.text.strip()
-                    
+
                     if result_text.startswith("```json"):
                         result_text = result_text[7:-3].strip()
                     elif result_text.startswith("```"):
                         result_text = result_text[3:-3].strip()
-                        
+
                     transactions_data = json.loads(result_text)
-                    
+
                     success_count = 0
+
                     for t in transactions_data:
                         store_name = t.get("store", "未知商店")
                         amount_val = int(t.get("amount", 0))
                         cat_val = t.get("category", "其他")
-                        
+
                         date_str = t.get("date")
+
                         if not date_str:
-                             date_str = str(datetime.today().date())
-                             
-                        add_transaction(current_user, date_str, cat_val, store_name, amount_val, "AI截圖批次")
+                            date_str = str(datetime.today().date())
+
+                        add_transaction(
+                            current_user,
+                            date_str,
+                            cat_val,
+                            store_name,
+                            amount_val,
+                            "AI截圖批次"
+                        )
+
                         success_count += 1
-                        
-                    st.sidebar.success(f"成功辨識並新增了 {success_count} 筆記帳！")
+
+                    st.sidebar.success(
+                        f"成功辨識並新增了 {success_count} 筆記帳！"
+                    )
+
                     st.rerun()
-                    
+
                 except json.JSONDecodeError:
-                    st.sidebar.error("AI 回傳的格式不正確請再試一次。")
+                    st.sidebar.error(
+                        "AI 回傳的格式不正確，請再試一次。"
+                    )
+
                 except Exception as e:
-                    st.sidebar.error(f"辨識失敗：{e}")
+                    st.sidebar.error(
+                        f"辨識失敗：{e}"
+                    )
 
 # --- 6. 主畫面：圖表與明細 ---
 st.subheader("📊 消費總覽與記錄")
