@@ -43,7 +43,7 @@ def add_transaction(user_id, date, category, store, amount, source):
 
 # --- 4. 簡單登入系統 ---
 USERS = {
-    "tom": "1234",
+    "tom": "29449424",
     "friend": "5678",
     "guest": "0000"
 }
