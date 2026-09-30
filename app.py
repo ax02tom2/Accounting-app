@@ -13,7 +13,6 @@ st.set_page_config(page_title="AI 智慧記帳助手", page_icon="💰", layout=
 SUPABASE_URL = st.secrets["SUPABASE_URL"].rstrip("/")
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 
-# 建立 Supabase REST API 專用 Headers
 HEADERS = {
     "apikey": SUPABASE_KEY,
     "Authorization": f"Bearer {SUPABASE_KEY}",
@@ -24,11 +23,12 @@ HEADERS = {
 api_key = st.secrets.get("GEMINI_API_KEY")
 if api_key:
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-2.5-flash")
+    # 修正為正確且穩定的 Gemini 模型名稱
+    model = genai.GenerativeModel("gemini-1.5-flash")
 else:
     st.warning("⚠️ 尚未設定 GEMINI_API_KEY，圖片辨識功能將無法使用。")
 
-# --- 3. 資料庫操作函數 (改用 REST API 溝通) ---
+# --- 3. 資料庫操作函數 (使用 REST API) ---
 def load_user_data(user_id):
     url = f"{SUPABASE_URL}/rest/v1/transactions?user_id=eq.{user_id}&order=date.desc"
     response = requests.get(url, headers=HEADERS)
@@ -77,7 +77,7 @@ if not st.session_state.logged_in:
     
     st.stop()
 
-# --- 以下為登入後的主畫面 ---
+# --- 主畫面 ---
 current_user = st.session_state.current_user
 
 col_title, col_logout = st.columns([4, 1])
@@ -109,17 +109,11 @@ if tab_choice == "手動輸入":
             st.rerun()
 
 elif tab_choice == "上傳發票/截圖":
-    uploaded_file = st.sidebar.file_uploader(
-        "上傳發票或網購/銀行明細截圖",
-        type=["jpg", "jpeg", "png"]
-    )
+    uploaded_file = st.sidebar.file_uploader("上傳發票或網購/銀行明細截圖", type=["jpg", "jpeg", "png"])
 
     if uploaded_file and api_key:
-        st.sidebar.image(
-            uploaded_file,
-            caption="上傳的圖片",
-            width="stretch"
-        )
+        # 修正圖片顯示參數
+        st.sidebar.image(uploaded_file, caption="上傳的圖片", use_column_width=True)
 
         if st.sidebar.button("🤖 AI 自動辨識並記帳"):
             with st.spinner("AI 正在分析圖片內容...這可能需要幾秒鐘"):
@@ -140,7 +134,7 @@ JSON 格式範例：
     "date": "YYYY-MM-DD",
     "store": "商店或項目名稱",
     "amount": 數字金額,
-    "category": "請從 {", ".join(CATEGORIES)} 中選一個最適合的分類"
+    "category": "請從 {', '.join(CATEGORIES)} 中選一個最適合的分類"
   }}
 ]"""
 
@@ -153,45 +147,27 @@ JSON 格式範例：
                         result_text = result_text[3:-3].strip()
 
                     transactions_data = json.loads(result_text)
-
                     success_count = 0
 
                     for t in transactions_data:
                         store_name = t.get("store", "未知商店")
                         amount_val = int(t.get("amount", 0))
                         cat_val = t.get("category", "其他")
-
                         date_str = t.get("date")
 
                         if not date_str:
                             date_str = str(datetime.today().date())
 
-                        add_transaction(
-                            current_user,
-                            date_str,
-                            cat_val,
-                            store_name,
-                            amount_val,
-                            "AI截圖批次"
-                        )
-
+                        add_transaction(current_user, date_str, cat_val, store_name, amount_val, "AI截圖批次")
                         success_count += 1
 
-                    st.sidebar.success(
-                        f"成功辨識並新增了 {success_count} 筆記帳！"
-                    )
-
+                    st.sidebar.success(f"成功辨識並新增了 {success_count} 筆記帳！")
                     st.rerun()
 
                 except json.JSONDecodeError:
-                    st.sidebar.error(
-                        "AI 回傳的格式不正確，請再試一次。"
-                    )
-
+                    st.sidebar.error("AI 回傳的格式不正確，請再試一次。")
                 except Exception as e:
-                    st.sidebar.error(
-                        f"辨識失敗：{e}"
-                    )
+                    st.sidebar.error(f"辨識失敗：{e}")
 
 # --- 6. 主畫面：圖表與明細 ---
 st.subheader("📊 消費總覽與記錄")
