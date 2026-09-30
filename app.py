@@ -4,33 +4,41 @@ import pandas as pd
 import streamlit as st
 from datetime import datetime
 import google.generativeai as genai
-from supabase import create_client, Client
+import requests
 
 # --- 1. 頁面基本設定 ---
 st.set_page_config(page_title="AI 智慧記帳助手", page_icon="💰", layout="centered")
 
-# --- 2. 系統設定與連線 (Supabase & Gemini) ---
-@st.cache_resource
-def init_connection():
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_KEY"]
-    return create_client(url, key)
+# --- 2. 系統設定與連線 (Supabase REST API & Gemini) ---
+SUPABASE_URL = st.secrets["SUPABASE_URL"].rstrip("/")
+SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 
-supabase = init_connection()
+HEADERS = {
+    "apikey": SUPABASE_KEY,
+    "Authorization": f"Bearer {SUPABASE_KEY}",
+    "Content-Type": "application/json",
+    "Prefer": "return=representation"
+}
 
 api_key = st.secrets.get("GEMINI_API_KEY")
 if api_key:
     genai.configure(api_key=api_key)
+    # 使用穩定且支援多模態的正確模型
     model = genai.GenerativeModel("gemini-1.5-flash")
 else:
     st.warning("⚠️ 尚未設定 GEMINI_API_KEY，圖片辨識功能將無法使用。")
 
-# --- 3. 資料庫操作函數 ---
+# --- 3. 資料庫操作函數 (使用標準 requests，絕不相依衝突) ---
 def load_user_data(user_id):
-    response = supabase.table("transactions").select("*").eq("user_id", user_id).order("date", desc=True).execute()
-    return pd.DataFrame(response.data)
+    url = f"{SUPABASE_URL}/rest/v1/transactions?user_id=eq.{user_id}&order=date.desc"
+    response = requests.get(url, headers=HEADERS)
+    if response.status_code == 200:
+        data = response.json()
+        return pd.DataFrame(data)
+    return pd.DataFrame(columns=["date", "category", "store", "amount", "source"])
 
 def add_transaction(user_id, date, category, store, amount, source):
+    url = f"{SUPABASE_URL}/rest/v1/transactions"
     data = {
         "user_id": user_id,
         "date": str(date),
@@ -39,7 +47,7 @@ def add_transaction(user_id, date, category, store, amount, source):
         "amount": amount,
         "source": source
     }
-    supabase.table("transactions").insert(data).execute()
+    requests.post(url, headers=HEADERS, json=data)
 
 # --- 4. 簡單登入系統 ---
 USERS = {
@@ -143,7 +151,7 @@ JSON 格式範例：
                     for t in transactions_data:
                         store_name = t.get("store", "未知商店")
                         amount_val = int(t.get("amount", 0))
-                        cat_val = t.get("category", "other")
+                        cat_val = t.get("category", "其他")
                         date_str = t.get("date")
 
                         if not date_str:
