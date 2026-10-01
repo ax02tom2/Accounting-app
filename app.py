@@ -167,7 +167,7 @@ current_user = st.session_state.current_user
 
 col_title, col_logout = st.columns([4, 1])
 with col_title:
-    st.title(f"💰 AI 記帳本")
+    st.title(f"🐾 記帳助手")
     st.caption(f"👤 使用者：{current_user}")
 with col_logout:
     st.write("")
