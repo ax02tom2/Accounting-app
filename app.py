@@ -61,8 +61,6 @@ def to_int_amount(value):
     return int(float(cleaned)) if cleaned else 0
 
 # --- 4. 免密碼專屬網址登入系統 ---
-
-# 讀取網址列的參數 (例如 ?user=tom123)
 query_params = st.query_params
 
 if "logged_in" not in st.session_state:
@@ -81,9 +79,11 @@ if not st.session_state.logged_in:
     st.info("💡 請使用您的「專屬網址」進入系統。")
     st.write("第一次使用？請在下方建立您的專屬識別碼（這將作為您的隱私鑰匙）：")
     
-    new_user_id = st.text_input("輸入新的專屬識別碼 (建議使用英文+數字，例如：john_9527)")
+    new_user_id = st.text_input("輸入新的專屬識別碼 (例如：john_9527)")
     if st.button("建立並進入"):
         if new_user_id:
+            # ✨ 關鍵魔法：主動將代碼寫入上方網址列
+            st.query_params["user"] = new_user_id 
             st.session_state.logged_in = True
             st.session_state.current_user = new_user_id
             st.rerun()
@@ -97,9 +97,13 @@ current_user = st.session_state.current_user
 col_title, col_logout = st.columns([4, 1])
 with col_title:
     st.title(f"💰 {current_user} 的 AI 記帳本")
+    # 貼心顯示專屬網址讓使用者可以直接複製
+    st.caption(f"🔗 您的專屬通道：不要外流，請將上方網址加入書籤或手機主畫面！")
 with col_logout:
     st.write("")
     if st.button("登出"):
+        # 登出時清除網址列的秘密代碼
+        st.query_params.clear()
         st.session_state.logged_in = False
         st.session_state.current_user = ""
         st.rerun()
