@@ -11,25 +11,36 @@ import plotly.express as px
 # --- 1. 頁面基本設定 ---
 st.set_page_config(page_title="AI 智慧記帳助手", page_icon="💰", layout="centered")
 
-# --- ✨ 新增：美化底圖，改為現代感柔和漸層 (其他程式碼完全不變) ---
+# --- ✨ 新增：活潑明亮自然風 CSS (浮動卡片、圓角、清新漸層) ---
 st.markdown("""
 <style>
-/* 主畫面背景：淺藍灰柔和漸層，視覺更舒服 */
+/* 主畫面背景：清新自然草木綠漸層，充滿生機與明亮感 */
 .stApp {
-    background: linear-gradient(135deg, #f5f7fa 0%, #e0e5ec 100%);
+    background: linear-gradient(120deg, #e0f2f1 0%, #a5d6a7 100%);
 }
-/* 讓頂部預設的一條白邊變透明，使漸層更完整 */
+/* 讓頂部白邊變透明 */
 [data-testid="stHeader"] {
     background-color: rgba(0,0,0,0);
 }
-/* 側邊欄背景微調為極淺灰，增加立體與層次感 */
+/* 側邊欄背景：溫暖的奶白色，帶點微陰影 */
 [data-testid="stSidebar"] {
-    background-color: #f8f9fa;
+    background-color: #fffefa;
+    border-right: 1px solid rgba(0,0,0,0.05);
+    box-shadow: 2px 0 10px rgba(0,0,0,0.03);
 }
-/* 讓明細表格的背景保持純白，確保文字清晰易讀 */
-[data-testid="stDataFrame"] {
-    background-color: #ffffff;
-    border-radius: 8px;
+/* 讓明細表格與數字看板變成白色半透明的浮動卡片 */
+[data-testid="stDataFrame"], [data-testid="stMetric"] {
+    background-color: rgba(255, 255, 255, 0.85);
+    border-radius: 16px;
+    padding: 15px;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.06);
+    backdrop-filter: blur(5px);
+}
+/* 美化 Tab 標籤頁，讓它看起來更圓潤可愛 */
+.stTabs [data-baseweb="tab"] {
+    background-color: rgba(255, 255, 255, 0.5);
+    border-radius: 10px 10px 0 0;
+    margin-right: 5px;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -209,24 +220,20 @@ JSON 格式範例：
                     st.sidebar.error(f"辨識失敗，請檢查圖片或再試一次。")
 
 # --- 6. 主畫面：圖表與明細 (大改版) ---
-st.divider() # 加入分隔線讓畫面更清爽
+st.divider() 
 
 df = load_user_data(current_user)
 
 if not df.empty and "amount" in df.columns:
-    # 處理日期與月份資料
     df["date"] = pd.to_datetime(df["date"])
     df["month"] = df["date"].dt.strftime("%Y-%m")
     
-    # 取得所有月份清單 (由新到舊)
     all_months = sorted(df["month"].unique(), reverse=True)
     
-    # 建立月份篩選器
     col_filter, col_metric = st.columns([1, 1])
     with col_filter:
         selected_month = st.selectbox("📅 選擇月份", ["全部紀錄"] + all_months)
     
-    # 依照選擇過濾資料
     if selected_month == "全部紀錄":
         filtered_df = df
         display_title = "累積總支出"
@@ -237,27 +244,22 @@ if not df.empty and "amount" in df.columns:
     total_spent = filtered_df["amount"].sum()
     
     with col_metric:
-        # 用精美的樣式顯示總支出
         st.metric(label=display_title, value=f"NT$ {total_spent:,}")
 
-    # 若該月有資料才顯示圖表
     if not filtered_df.empty:
-        # 改用 Tabs 分頁，解決手機版面擁擠問題
         tab_chart, tab_table = st.tabs(["📊 類別圓餅圖", "📝 該月詳細明細"])
         
         with tab_chart:
-            # 群組資料並繪製 Plotly 圓餅圖
             category_group = filtered_df.groupby("category", as_index=False)["amount"].sum()
             
             fig = px.pie(
                 category_group, 
                 values="amount", 
                 names="category", 
-                hole=0.4, # 變成甜甜圈圖，較現代感
-                color_discrete_sequence=px.colors.qualitative.Pastel # 使用柔和繽紛的色彩
+                hole=0.4, 
+                color_discrete_sequence=px.colors.qualitative.Pastel 
             )
             
-            # 設定圓餅圖直接顯示「類別、金額、趴數」
             fig.update_traces(
                 textposition='inside', 
                 textinfo='label+percent',
@@ -267,13 +269,12 @@ if not df.empty and "amount" in df.columns:
             fig.update_layout(
                 showlegend=False, 
                 margin=dict(t=10, b=10, l=10, r=10),
-                paper_bgcolor='rgba(0,0,0,0)', # 圖表背景透明，融入我們美化的底圖
+                paper_bgcolor='rgba(0,0,0,0)', 
                 plot_bgcolor='rgba(0,0,0,0)'
             )
             st.plotly_chart(fig, use_container_width=True)
 
         with tab_table:
-            # 格式化表格
             display_df = filtered_df[["date", "category", "store", "amount", "source"]].copy()
             display_df["date"] = display_df["date"].dt.strftime("%Y-%m-%d")
             display_df = display_df.rename(
@@ -282,7 +283,6 @@ if not df.empty and "amount" in df.columns:
             
             st.dataframe(display_df, use_container_width=True, hide_index=True)
             
-            # 下載該月資料按鈕
             csv = display_df.to_csv(index=False).encode("utf-8")
             st.download_button(
                 label=f"📥 下載 {selected_month} 記帳 CSV", 
