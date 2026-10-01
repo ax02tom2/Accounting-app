@@ -11,6 +11,29 @@ import plotly.express as px
 # --- 1. 頁面基本設定 ---
 st.set_page_config(page_title="AI 智慧記帳助手", page_icon="💰", layout="centered")
 
+# --- ✨ 新增：美化底圖，改為現代感柔和漸層 (其他程式碼完全不變) ---
+st.markdown("""
+<style>
+/* 主畫面背景：淺藍灰柔和漸層，視覺更舒服 */
+.stApp {
+    background: linear-gradient(135deg, #f5f7fa 0%, #e0e5ec 100%);
+}
+/* 讓頂部預設的一條白邊變透明，使漸層更完整 */
+[data-testid="stHeader"] {
+    background-color: rgba(0,0,0,0);
+}
+/* 側邊欄背景微調為極淺灰，增加立體與層次感 */
+[data-testid="stSidebar"] {
+    background-color: #f8f9fa;
+}
+/* 讓明細表格的背景保持純白，確保文字清晰易讀 */
+[data-testid="stDataFrame"] {
+    background-color: #ffffff;
+    border-radius: 8px;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # 初始化 Cookie 控制器
 controller = CookieController()
 
@@ -241,7 +264,12 @@ if not df.empty and "amount" in df.columns:
                 hovertemplate='<b>%{label}</b><br>金額: NT$ %{value:,}<br>佔比: %{percent}<extra></extra>'
             )
             
-            fig.update_layout(showlegend=False, margin=dict(t=10, b=10, l=10, r=10))
+            fig.update_layout(
+                showlegend=False, 
+                margin=dict(t=10, b=10, l=10, r=10),
+                paper_bgcolor='rgba(0,0,0,0)', # 圖表背景透明，融入我們美化的底圖
+                plot_bgcolor='rgba(0,0,0,0)'
+            )
             st.plotly_chart(fig, use_container_width=True)
 
         with tab_table:
