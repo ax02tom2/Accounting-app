@@ -60,32 +60,35 @@ def to_int_amount(value):
     cleaned = "".join(ch for ch in str(value) if ch.isdigit() or ch in ".-")
     return int(float(cleaned)) if cleaned else 0
 
-# --- 4. 簡單登入系統 ---
-USERS = {
-    "tom": "1234",
-    "friend": "5678",
-    "guest": "0000"
-}
+# --- 4. 免密碼專屬網址登入系統 ---
+
+# 讀取網址列的參數 (例如 ?user=tom123)
+query_params = st.query_params
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "current_user" not in st.session_state:
     st.session_state.current_user = ""
 
-if not st.session_state.logged_in:
-    st.title("🔐 AI 記帳本 - 登入")
-    st.write("請輸入帳號密碼以讀取您的專屬記帳資料。")
-    username = st.text_input("帳號 (例如: tom)")
-    password = st.text_input("密碼", type="password")
+# 如果網址有帶 user 參數，直接自動登入
+if "user" in query_params:
+    st.session_state.logged_in = True
+    st.session_state.current_user = query_params["user"]
 
-    if st.button("登入"):
-        if username in USERS and USERS[username] == password:
+# 如果沒有登入狀態，顯示首頁提示
+if not st.session_state.logged_in:
+    st.title("🔐 AI 記帳本")
+    st.info("💡 請使用您的「專屬網址」進入系統。")
+    st.write("第一次使用？請在下方建立您的專屬識別碼（這將作為您的隱私鑰匙）：")
+    
+    new_user_id = st.text_input("輸入新的專屬識別碼 (建議使用英文+數字，例如：john_9527)")
+    if st.button("建立並進入"):
+        if new_user_id:
             st.session_state.logged_in = True
-            st.session_state.current_user = username
+            st.session_state.current_user = new_user_id
             st.rerun()
         else:
-            st.error("帳號或密碼錯誤！")
-
+            st.error("請輸入識別碼！")
     st.stop()
 
 # --- 主畫面 ---
