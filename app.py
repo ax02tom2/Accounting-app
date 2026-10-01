@@ -1,5 +1,6 @@
 import os
 import json
+import base64
 import pandas as pd
 import streamlit as st
 from datetime import datetime
@@ -11,33 +12,51 @@ import plotly.express as px
 # --- 1. 頁面基本設定 ---
 st.set_page_config(page_title="AI 智慧記帳助手", page_icon="💰", layout="centered")
 
-# --- ✨ 新增：自然風景圖片背景 + 半透明毛玻璃卡片 (Glassmorphism) ---
-st.markdown("""
+# --- ✨ 新增：自動讀取本機圖片與刷淡 65% 的遮罩處理 ---
+def get_base64_image(image_path):
+    """讀取本機圖片並轉成 Base64 供網頁 CSS 使用"""
+    try:
+        with open(image_path, "rb") as img_file:
+            return base64.b64encode(img_file.read()).decode()
+    except Exception:
+        return None
+
+# 您只要將圖片命名為 bg.jpg 並上傳到 GitHub 即可
+local_bg_path = "bg.jpg"
+bg_base64 = get_base64_image(local_bg_path)
+
+if bg_base64:
+    # 讀取到 GitHub 內的自訂圖片
+    bg_image_css = f"url('data:image/jpeg;base64,{bg_base64}')"
+else:
+    # 如果沒上傳圖，就預設使用這張網路圖片
+    bg_image_css = "url('https://images.unsplash.com/photo-1473448912268-2022ce9509d8?q=80&w=2000&auto=format&fit=crop')"
+
+st.markdown(f"""
 <style>
-/* 主畫面背景：載入自然風景圖片，並固定背景不隨滾動條移動 */
-.stApp {
-    /* 👇 如果您有月報系統的圖片網址，請把下面括號內的網址替換掉即可 👇 */
-    background-image: url("https://images.unsplash.com/photo-1473448912268-2022ce9509d8?q=80&w=2000&auto=format&fit=crop");
+/* 主畫面背景：加上 linear-gradient 65% 白色遮罩，完美刷淡圖片，不再搶眼 */
+.stApp {{
+    background-image: linear-gradient(rgba(255, 255, 255, 0.65), rgba(255, 255, 255, 0.65)), {bg_image_css};
     background-size: cover;
     background-position: center;
     background-attachment: fixed;
     background-repeat: no-repeat;
-}
+}}
 
 /* 讓頂部預設的一條白邊變透明 */
-[data-testid="stHeader"] {
+[data-testid="stHeader"] {{
     background-color: rgba(0,0,0,0);
-}
+}}
 
-/* 側邊欄背景：改為半透明，讓背景風景可以隱約透過去 */
-[data-testid="stSidebar"] {
+/* 側邊欄背景：改為半透明 */
+[data-testid="stSidebar"] {{
     background-color: rgba(255, 255, 255, 0.85);
     backdrop-filter: blur(10px);
     border-right: 1px solid rgba(255,255,255,0.3);
-}
+}}
 
 /* 讓明細表格與數字看板變成「毛玻璃」透明卡片 */
-[data-testid="stDataFrame"], [data-testid="stMetric"] {
+[data-testid="stDataFrame"], [data-testid="stMetric"] {{
     background-color: rgba(255, 255, 255, 0.75);
     border-radius: 16px;
     padding: 15px;
@@ -45,15 +64,15 @@ st.markdown("""
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     border: 1px solid rgba(255, 255, 255, 0.5);
-}
+}}
 
 /* 美化 Tab 標籤頁，使其微透明且圓潤 */
-.stTabs [data-baseweb="tab"] {
+.stTabs [data-baseweb="tab"] {{
     background-color: rgba(255, 255, 255, 0.6);
     border-radius: 10px 10px 0 0;
     margin-right: 5px;
     border: 1px solid rgba(255, 255, 255, 0.5);
-}
+}}
 </style>
 """, unsafe_allow_html=True)
 
