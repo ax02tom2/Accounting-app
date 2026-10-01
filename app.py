@@ -11,36 +11,48 @@ import plotly.express as px
 # --- 1. 頁面基本設定 ---
 st.set_page_config(page_title="AI 智慧記帳助手", page_icon="💰", layout="centered")
 
-# --- ✨ 新增：活潑明亮自然風 CSS (浮動卡片、圓角、清新漸層) ---
+# --- ✨ 新增：自然風景圖片背景 + 半透明毛玻璃卡片 (Glassmorphism) ---
 st.markdown("""
 <style>
-/* 主畫面背景：清新自然草木綠漸層，充滿生機與明亮感 */
+/* 主畫面背景：載入自然風景圖片，並固定背景不隨滾動條移動 */
 .stApp {
-    background: linear-gradient(120deg, #e0f2f1 0%, #a5d6a7 100%);
+    /* 👇 如果您有月報系統的圖片網址，請把下面括號內的網址替換掉即可 👇 */
+    background-image: url("https://images.unsplash.com/photo-1473448912268-2022ce9509d8?q=80&w=2000&auto=format&fit=crop");
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    background-repeat: no-repeat;
 }
-/* 讓頂部白邊變透明 */
+
+/* 讓頂部預設的一條白邊變透明 */
 [data-testid="stHeader"] {
     background-color: rgba(0,0,0,0);
 }
-/* 側邊欄背景：溫暖的奶白色，帶點微陰影 */
+
+/* 側邊欄背景：改為半透明，讓背景風景可以隱約透過去 */
 [data-testid="stSidebar"] {
-    background-color: #fffefa;
-    border-right: 1px solid rgba(0,0,0,0.05);
-    box-shadow: 2px 0 10px rgba(0,0,0,0.03);
-}
-/* 讓明細表格與數字看板變成白色半透明的浮動卡片 */
-[data-testid="stDataFrame"], [data-testid="stMetric"] {
     background-color: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(10px);
+    border-right: 1px solid rgba(255,255,255,0.3);
+}
+
+/* 讓明細表格與數字看板變成「毛玻璃」透明卡片 */
+[data-testid="stDataFrame"], [data-testid="stMetric"] {
+    background-color: rgba(255, 255, 255, 0.75);
     border-radius: 16px;
     padding: 15px;
-    box-shadow: 0 8px 20px rgba(0,0,0,0.06);
-    backdrop-filter: blur(5px);
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.5);
 }
-/* 美化 Tab 標籤頁，讓它看起來更圓潤可愛 */
+
+/* 美化 Tab 標籤頁，使其微透明且圓潤 */
 .stTabs [data-baseweb="tab"] {
-    background-color: rgba(255, 255, 255, 0.5);
+    background-color: rgba(255, 255, 255, 0.6);
     border-radius: 10px 10px 0 0;
     margin-right: 5px;
+    border: 1px solid rgba(255, 255, 255, 0.5);
 }
 </style>
 """, unsafe_allow_html=True)
