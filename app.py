@@ -6,11 +6,12 @@ from datetime import datetime
 import google.generativeai as genai
 import requests
 from streamlit_cookies_controller import CookieController
+import plotly.express as px
 
 # --- 1. 頁面基本設定 ---
 st.set_page_config(page_title="AI 智慧記帳助手", page_icon="💰", layout="centered")
 
-# 初始化 Cookie 控制器 (負責讓手機永久記憶帳號)
+# 初始化 Cookie 控制器
 controller = CookieController()
 
 # --- 2. 系統設定與連線 (Supabase REST API & Gemini) ---
@@ -25,8 +26,8 @@ HEADERS = {
 }
 
 MODEL_NAME = st.secrets.get("GEMINI_MODEL", "gemini-2.5-flash")
-
 api_key = st.secrets.get("GEMINI_API_KEY")
+
 if api_key:
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel(MODEL_NAME)
@@ -68,32 +69,25 @@ if "logged_in" not in st.session_state:
 if "current_user" not in st.session_state:
     st.session_state.current_user = ""
 
-# 嘗試從手機 Cookie 讀取記憶的帳號
 saved_user = controller.get("saved_user")
 query_params = st.query_params
 
-# 判斷登入邏輯：網址帶入 優先於 手機Cookie
 if "user" in query_params:
     current = query_params["user"]
     st.session_state.logged_in = True
     st.session_state.current_user = current
-    # 將網址的帳號寫入手機 Cookie 永久保存
     if saved_user != current:
         controller.set("saved_user", current)
-        
 elif saved_user:
     st.session_state.logged_in = True
     st.session_state.current_user = saved_user
 
-# 如果完全沒有登入過，顯示首頁
 if not st.session_state.logged_in:
     st.title("🔐 AI 記帳本")
     st.info("💡 第一次使用？請輸入您的專屬識別碼。登入後，您的手機將永久記住這個帳本！")
-    
     new_user_id = st.text_input("輸入專屬識別碼 (例如：crazydog_7414)")
     if st.button("建立並進入"):
         if new_user_id:
-            # 寫入 Cookie 並重新載入
             controller.set("saved_user", new_user_id)
             st.query_params["user"] = new_user_id 
             st.session_state.logged_in = True
@@ -103,17 +97,16 @@ if not st.session_state.logged_in:
             st.error("請輸入識別碼！")
     st.stop()
 
-# --- 主畫面 ---
+# --- 主畫面頂部 ---
 current_user = st.session_state.current_user
 
 col_title, col_logout = st.columns([4, 1])
 with col_title:
-    st.title(f"💰 {current_user} 的 AI 記帳本")
-    st.caption("📱 您的手機已永久記住此帳本，可直接從桌面 App 開啟！")
+    st.title(f"💰 AI 記帳本")
+    st.caption(f"👤 使用者：{current_user}")
 with col_logout:
     st.write("")
-    if st.button("登出"):
-        # 登出時徹底清除 Cookie 與網址
+    if st.button("登出", use_container_width=True):
         controller.remove("saved_user")
         st.query_params.clear()
         st.session_state.logged_in = False
@@ -143,19 +136,13 @@ if tab_choice == "手動輸入":
 
 elif tab_choice == "上傳發票/截圖":
     uploaded_file = st.sidebar.file_uploader("上傳發票或網購/銀行明細截圖", type=["jpg", "jpeg", "png"])
-
     if uploaded_file and api_key:
         st.sidebar.image(uploaded_file, caption="上傳的圖片", use_column_width=True)
-
         if st.sidebar.button("🤖 AI 自動辨識並記帳"):
             with st.spinner("AI 正在分析圖片內容...這可能需要幾秒鐘"):
                 try:
                     image_bytes = uploaded_file.getvalue()
-                    image_part = {
-                        "mime_type": uploaded_file.type,
-                        "data": image_bytes
-                    }
-
+                    image_part = {"mime_type": uploaded_file.type, "data": image_bytes}
                     prompt = f"""這是一張銀行消費明細或發票的截圖。
 請幫我把裡面「所有」的消費紀錄都抓出來。
 請嚴格以 JSON 陣列 (JSON array) 的格式回傳，不要包含任何其他說明文字。
@@ -169,10 +156,8 @@ JSON 格式範例：
     "category": "請從 {', '.join(CATEGORIES)} 中選一個最適合的分類"
   }}
 ]"""
-
                     response = model.generate_content([image_part, prompt])
                     result_text = response.text.strip()
-
                     if result_text.startswith("```json"):
                         result_text = result_text[7:-3].strip()
                     elif result_text.startswith("```"):
@@ -188,7 +173,6 @@ JSON 格式範例：
                         if cat_val not in CATEGORIES:
                             cat_val = "其他"
                         date_str = t.get("date")
-
                         if not date_str:
                             date_str = str(datetime.today().date())
 
@@ -198,34 +182,88 @@ JSON 格式範例：
                     st.sidebar.success(f"成功辨識並新增了 {success_count} 筆記帳！")
                     st.rerun()
 
-                except json.JSONDecodeError:
-                    st.sidebar.error("AI 回傳的格式不正確，請再試一次。")
                 except Exception as e:
-                    st.sidebar.error(f"辨識失敗：{e}")
+                    st.sidebar.error(f"辨識失敗，請檢查圖片或再試一次。")
 
-# --- 6. 主畫面：圖表與明細 ---
-st.subheader("📊 消費總覽與記錄")
+# --- 6. 主畫面：圖表與明細 (大改版) ---
+st.divider() # 加入分隔線讓畫面更清爽
 
 df = load_user_data(current_user)
 
 if not df.empty and "amount" in df.columns:
-    total_spent = df["amount"].sum()
-    st.metric(label="累積總支出", value=f"NT$ {total_spent:,}")
+    # 處理日期與月份資料
+    df["date"] = pd.to_datetime(df["date"])
+    df["month"] = df["date"].dt.strftime("%Y-%m")
+    
+    # 取得所有月份清單 (由新到舊)
+    all_months = sorted(df["month"].unique(), reverse=True)
+    
+    # 建立月份篩選器
+    col_filter, col_metric = st.columns([1, 1])
+    with col_filter:
+        selected_month = st.selectbox("📅 選擇月份", ["全部紀錄"] + all_months)
+    
+    # 依照選擇過濾資料
+    if selected_month == "全部紀錄":
+        filtered_df = df
+        display_title = "累積總支出"
+    else:
+        filtered_df = df[df["month"] == selected_month]
+        display_title = f"{selected_month} 月總支出"
+        
+    total_spent = filtered_df["amount"].sum()
+    
+    with col_metric:
+        # 用精美的樣式顯示總支出
+        st.metric(label=display_title, value=f"NT$ {total_spent:,}")
 
-    col1, col2 = st.columns(2)
-    with col1:
-        st.write("### 類別支出佔比")
-        category_group = df.groupby("category")["amount"].sum()
-        st.bar_chart(category_group)
+    # 若該月有資料才顯示圖表
+    if not filtered_df.empty:
+        # 改用 Tabs 分頁，解決手機版面擁擠問題
+        tab_chart, tab_table = st.tabs(["📊 類別圓餅圖", "📝 該月詳細明細"])
+        
+        with tab_chart:
+            # 群組資料並繪製 Plotly 圓餅圖
+            category_group = filtered_df.groupby("category", as_index=False)["amount"].sum()
+            
+            fig = px.pie(
+                category_group, 
+                values="amount", 
+                names="category", 
+                hole=0.4, # 變成甜甜圈圖，較現代感
+                color_discrete_sequence=px.colors.qualitative.Pastel # 使用柔和繽紛的色彩
+            )
+            
+            # 設定圓餅圖直接顯示「類別、金額、趴數」
+            fig.update_traces(
+                textposition='inside', 
+                textinfo='label+percent',
+                hovertemplate='<b>%{label}</b><br>金額: NT$ %{value:,}<br>佔比: %{percent}<extra></extra>'
+            )
+            
+            fig.update_layout(showlegend=False, margin=dict(t=10, b=10, l=10, r=10))
+            st.plotly_chart(fig, use_container_width=True)
 
-    with col2:
-        st.write("### 詳細明細表")
-        display_df = df[["date", "category", "store", "amount", "source"]].rename(
-            columns={"date": "日期", "category": "類別", "store": "商店/項目", "amount": "金額", "source": "來源"}
-        )
-        st.dataframe(display_df, use_container_width=True)
+        with tab_table:
+            # 格式化表格
+            display_df = filtered_df[["date", "category", "store", "amount", "source"]].copy()
+            display_df["date"] = display_df["date"].dt.strftime("%Y-%m-%d")
+            display_df = display_df.rename(
+                columns={"date": "日期", "category": "類別", "store": "商店/項目", "amount": "金額", "source": "來源"}
+            )
+            
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
+            
+            # 下載該月資料按鈕
+            csv = display_df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label=f"📥 下載 {selected_month} 記帳 CSV", 
+                data=csv, 
+                file_name=f"{current_user}_expenses_{selected_month}.csv", 
+                mime="text/csv"
+            )
+    else:
+        st.info(f"這個月份 ({selected_month}) 目前沒有記帳紀錄喔！")
 
-    csv = display_df.to_csv(index=False).encode("utf-8")
-    st.download_button(label="📥 下載個人記帳 CSV", data=csv, file_name=f"{current_user}_expenses.csv", mime="text/csv")
 else:
     st.info("目前尚無記帳資料，請從左側新增手動記帳或上傳發票截圖開始體驗！")
