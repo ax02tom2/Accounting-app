@@ -5,9 +5,13 @@ import streamlit as st
 from datetime import datetime
 import google.generativeai as genai
 import requests
+from streamlit_cookies_controller import CookieController
 
 # --- 1. 頁面基本設定 ---
 st.set_page_config(page_title="AI 智慧記帳助手", page_icon="💰", layout="centered")
+
+# 初始化 Cookie 控制器 (負責讓手機永久記憶帳號)
+controller = CookieController()
 
 # --- 2. 系統設定與連線 (Supabase REST API & Gemini) ---
 SUPABASE_URL = st.secrets["SUPABASE_URL"].rstrip("/")
@@ -20,7 +24,6 @@ HEADERS = {
     "Prefer": "return=representation"
 }
 
-# 模型名稱可在 Streamlit Secrets 加上 GEMINI_MODEL 覆蓋，未設定則用預設值
 MODEL_NAME = st.secrets.get("GEMINI_MODEL", "gemini-2.5-flash")
 
 api_key = st.secrets.get("GEMINI_API_KEY")
@@ -54,35 +57,44 @@ def add_transaction(user_id, date, category, store, amount, source):
         raise Exception(f"寫入資料庫失敗 ({response.status_code})：{response.text}")
 
 def to_int_amount(value):
-    """把 AI 回傳的金額轉成整數，容許 '1,200'、'$59' 這類格式"""
     if isinstance(value, (int, float)):
         return int(value)
     cleaned = "".join(ch for ch in str(value) if ch.isdigit() or ch in ".-")
     return int(float(cleaned)) if cleaned else 0
 
-# --- 4. 免密碼專屬網址登入系統 ---
-query_params = st.query_params
-
+# --- 4. 永久記憶：免密碼 Cookie 登入系統 ---
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "current_user" not in st.session_state:
     st.session_state.current_user = ""
 
-# 如果網址有帶 user 參數，直接自動登入
-if "user" in query_params:
-    st.session_state.logged_in = True
-    st.session_state.current_user = query_params["user"]
+# 嘗試從手機 Cookie 讀取記憶的帳號
+saved_user = controller.get("saved_user")
+query_params = st.query_params
 
-# 如果沒有登入狀態，顯示首頁提示
+# 判斷登入邏輯：網址帶入 優先於 手機Cookie
+if "user" in query_params:
+    current = query_params["user"]
+    st.session_state.logged_in = True
+    st.session_state.current_user = current
+    # 將網址的帳號寫入手機 Cookie 永久保存
+    if saved_user != current:
+        controller.set("saved_user", current)
+        
+elif saved_user:
+    st.session_state.logged_in = True
+    st.session_state.current_user = saved_user
+
+# 如果完全沒有登入過，顯示首頁
 if not st.session_state.logged_in:
     st.title("🔐 AI 記帳本")
-    st.info("💡 請使用您的「專屬網址」進入系統。")
-    st.write("第一次使用？請在下方建立您的專屬識別碼（這將作為您的隱私鑰匙）：")
+    st.info("💡 第一次使用？請輸入您的專屬識別碼。登入後，您的手機將永久記住這個帳本！")
     
-    new_user_id = st.text_input("輸入新的專屬識別碼 (例如：john_9527)")
+    new_user_id = st.text_input("輸入專屬識別碼 (例如：crazydog_7414)")
     if st.button("建立並進入"):
         if new_user_id:
-            # ✨ 關鍵魔法：主動將代碼寫入上方網址列
+            # 寫入 Cookie 並重新載入
+            controller.set("saved_user", new_user_id)
             st.query_params["user"] = new_user_id 
             st.session_state.logged_in = True
             st.session_state.current_user = new_user_id
@@ -97,12 +109,12 @@ current_user = st.session_state.current_user
 col_title, col_logout = st.columns([4, 1])
 with col_title:
     st.title(f"💰 {current_user} 的 AI 記帳本")
-    # 貼心顯示專屬網址讓使用者可以直接複製
-    st.caption(f"🔗 您的專屬通道：不要外流，請將上方網址加入書籤或手機主畫面！")
+    st.caption("📱 您的手機已永久記住此帳本，可直接從桌面 App 開啟！")
 with col_logout:
     st.write("")
     if st.button("登出"):
-        # 登出時清除網址列的秘密代碼
+        # 登出時徹底清除 Cookie 與網址
+        controller.remove("saved_user")
         st.query_params.clear()
         st.session_state.logged_in = False
         st.session_state.current_user = ""
@@ -133,7 +145,7 @@ elif tab_choice == "上傳發票/截圖":
     uploaded_file = st.sidebar.file_uploader("上傳發票或網購/銀行明細截圖", type=["jpg", "jpeg", "png"])
 
     if uploaded_file and api_key:
-        st.sidebar.image(uploaded_file, caption="上傳的圖片", width="stretch")
+        st.sidebar.image(uploaded_file, caption="上傳的圖片", use_column_width=True)
 
         if st.sidebar.button("🤖 AI 自動辨識並記帳"):
             with st.spinner("AI 正在分析圖片內容...這可能需要幾秒鐘"):
@@ -161,7 +173,6 @@ JSON 格式範例：
                     response = model.generate_content([image_part, prompt])
                     result_text = response.text.strip()
 
-                    # 去除可能的 markdown 程式碼區塊標記
                     if result_text.startswith("```json"):
                         result_text = result_text[7:-3].strip()
                     elif result_text.startswith("```"):
