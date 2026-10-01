@@ -10,7 +10,7 @@ from streamlit_cookies_controller import CookieController
 import plotly.express as px
 
 # --- 1. 頁面基本設定 ---
-st.set_page_config(page_title="AI 智慧記帳助手", page_icon="💰", layout="centered")
+st.set_page_config(page_title="記帳助手", page_icon="🐾", layout="centered")
 
 # --- ✨ 新增：自動讀取本機圖片與刷淡 65% 的遮罩處理 ---
 def get_base64_image(image_path):
