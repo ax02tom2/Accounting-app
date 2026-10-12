@@ -106,7 +106,7 @@ def load_user_data(user_id):
     response = requests.get(url, headers=HEADERS)
     if response.status_code == 200:
         return pd.DataFrame(response.json())
-    return pd.DataFrame(columns=["date", "category", "store", "amount", "source"])
+    return pd.DataFrame(columns=["id", "date", "category", "store", "amount", "source"])
 
 
 def add_transaction(user_id, date, category, store, amount, source):
@@ -122,6 +122,13 @@ def add_transaction(user_id, date, category, store, amount, source):
     response = requests.post(url, headers=HEADERS, json=data)
     if response.status_code not in (200, 201):
         raise Exception(f"寫入資料庫失敗 ({response.status_code})：{response.text}")
+
+def delete_transaction(transaction_id):
+    """刪除指定 ID 的記帳紀錄"""
+    url = f"{SUPABASE_URL}/rest/v1/transactions?id=eq.{transaction_id}"
+    response = requests.delete(url, headers=HEADERS)
+    if response.status_code not in (200, 204):
+        raise Exception(f"刪除資料庫失敗 ({response.status_code})：{response.text}")
 
 
 def to_int_amount(value):
@@ -173,28 +180,15 @@ JSON 格式：
 [{{"date": "YYYY-MM-DD 或 null", "store": "名稱", "amount": 123, "category": "分類", "source_type": "銀行明細"}}]"""
 
 
-def parse_json_text(text):
-    text = text.strip()
-    if text.startswith("```"):
-        text = text.strip("`")
-        if text.lower().startswith("json"):
-            text = text[4:]
-    data = json.loads(text.strip())
-    if isinstance(data, dict):  # 偶爾會被包在物件裡
-        for v in data.values():
-            if isinstance(v, list):
-                return v
-        return [data]
-    return data
-
-
 def extract_from_image(uploaded_file):
     image_part = {"mime_type": uploaded_file.type, "data": uploaded_file.getvalue()}
+    # 強制 AI 回傳原生 JSON 格式，穩定性大幅提升
     response = model.generate_content(
         [image_part, build_prompt()],
         generation_config={"response_mime_type": "application/json", "temperature": 0},
     )
-    return parse_json_text(response.text)
+    # 直接解析 JSON
+    return json.loads(response.text.strip())
 
 
 def mark_duplicates(pending, existing):
@@ -290,7 +284,7 @@ if tab_choice == "手動輸入":
                 st.sidebar.success("新增成功！")
                 st.rerun()
             except Exception as e:
-                st.sidebar.error(str(e))
+                st.sidebar.error(f"寫入失敗，詳細原因：{str(e)}")
 
 elif tab_choice == "上傳發票/截圖":
     st.sidebar.caption("支援：銀行/信用卡明細、蝦皮等訂單頁、LINE Pay/街口等行動支付、發票收據照片。可一次選多張。")
@@ -325,7 +319,7 @@ elif tab_choice == "上傳發票/截圖":
                             "source": "AI截圖-" + str(t.get("source_type") or "其他"),
                         })
                 except Exception as e:
-                    errors.append(f"{f.name}：{e}")
+                    errors.append(f"{f.name}：{str(e)}")
                 progress.progress((i + 1) / len(uploaded_files), text=f"已處理 {i + 1}/{len(uploaded_files)}")
             progress.empty()
 
@@ -374,7 +368,7 @@ if "pending_df" in st.session_state:
                 st.success(f"已新增 {n} 筆記帳！")
                 st.rerun()
             except Exception as e:
-                st.error(str(e))
+                st.error(f"寫入失敗，詳細原因：{str(e)}")
     with c2:
         if stretch(st.button, "🗑️ 全部捨棄"):
             st.session_state.pop("pending_df", None)
@@ -434,14 +428,49 @@ if not df.empty and "amount" in df.columns:
             stretch(st.plotly_chart, fig)
 
         with tab_table:
-            display_df = filtered_df[["date", "category", "store", "amount", "source"]].copy()
+            # 準備提供給編輯器顯示的 Dataframe，加入刪除勾選欄
+            display_df = filtered_df[["id", "date", "category", "store", "amount", "source"]].copy()
             display_df["date"] = display_df["date"].dt.strftime("%Y-%m-%d")
-            display_df = display_df.rename(
+            display_df.insert(0, "刪除", False) # 插入首欄作為刪除核取方塊
+
+            st.caption("💡 想要修改記錯的帳目？勾選前方「刪除」後點擊下方按鈕，刪除後再從左側重新新增即可！")
+            
+            edited_df = stretch(
+                st.data_editor,
+                display_df,
+                column_config={
+                    "id": None, # 隱藏資料庫 ID 避免使用者看到
+                    "刪除": st.column_config.CheckboxColumn("🗑️ 刪除", default=False),
+                    "date": "日期",
+                    "category": "類別",
+                    "store": "商店/項目",
+                    "amount": "金額",
+                    "source": "來源"
+                },
+                hide_index=True,
+                disabled=["date", "category", "store", "amount", "source"], # 鎖定其他欄位，只能操作刪除勾選
+                key=f"editor_{selected_month}"
+            )
+            
+            # 偵測是否有被勾選刪除的項目
+            selected_for_deletion = edited_df[edited_df["刪除"] == True]
+            if not selected_for_deletion.empty:
+                if stretch(st.button, f"⚠️ 確認刪除選取的 {len(selected_for_deletion)} 筆資料", type="primary"):
+                    try:
+                        for _, row in selected_for_deletion.iterrows():
+                            delete_transaction(row["id"]) # 呼叫 Supabase API 刪除
+                        st.success("成功刪除資料！")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"刪除失敗，詳細原因：{str(e)}")
+
+            st.write("") # 增加間距
+            
+            # 保持 CSV 下載功能
+            dl_df = display_df.drop(columns=["id", "刪除"]).rename(
                 columns={"date": "日期", "category": "類別", "store": "商店/項目", "amount": "金額", "source": "來源"}
             )
-            stretch(st.dataframe, display_df, hide_index=True)
-
-            csv = display_df.to_csv(index=False).encode("utf-8")
+            csv = dl_df.to_csv(index=False).encode("utf-8")
             st.download_button(
                 label=f"📥 下載 {selected_month} 記帳 CSV",
                 data=csv,
